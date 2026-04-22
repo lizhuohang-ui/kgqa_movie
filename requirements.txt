@@ -1,0 +1,39 @@
+# 电影知识图谱智能问答系统 (KGQA) - 依赖包列表
+# 安装命令：pip install -r requirements.txt
+
+# === 图数据库 (Neo4j 5.x 驱动，兼容 Neo4j 5.x 服务器) ===
+neo4j==5.27.0
+
+# === 深度学习框架 ===
+torch==1.13.1
+torchvision==0.14.1
+torchaudio==0.13.1
+
+# === NLP与Transformers ===
+transformers==4.30.2
+sentencepiece==0.1.99
+
+# === Web框架 ===
+fastapi==0.103.1
+uvicorn==0.23.2
+
+# === 前端 ===
+streamlit==1.24.0
+
+# === 数据与机器学习 ===
+pandas==2.0.3
+scikit-learn==1.3.0
+numpy
+
+# === 工具库 ===
+requests==2.31.0
+json5==0.9.14
+python-dotenv
+
+# === 可选：图谱可视化 ===
+# py2neo
+# networkx
+# matplotlib
+
+# === GPU版本PyTorch（如需GPU加速，取消下方注释并注释上方torch） ===
+# --index-url https://download.pytorch.org/whl/cu117
