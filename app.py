@@ -557,6 +557,11 @@ if "current_question" not in st.session_state:
 if "graph_entity" not in st.session_state:
     st.session_state.graph_entity = ""
 
+# 捕获待处理问题（来自侧边栏快速问题/推荐追问按钮）
+# 必须在渲染输入前捕获，避免按钮触发 rerun 后状态丢失
+has_pending_question = bool(st.session_state.current_question)
+pending_question_value = st.session_state.current_question
+
 # ===================== 图谱可视化 =====================
 with st.expander("🕸️ 图谱可视化", expanded=False):
     st.markdown("探索知识图谱中的实体关系，输入电影名或人名即可查看关联子图。")
@@ -566,7 +571,8 @@ with st.expander("🕸️ 图谱可视化", expanded=False):
             "输入实体名称",
             value=st.session_state.graph_entity,
             placeholder="例如：流浪地球、周星驰",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="graph_input_box"
         )
     with g_col2:
         graph_search = st.button("🔍 探索图谱", use_container_width=True, type="primary", key="graph_search_btn")
@@ -584,16 +590,16 @@ input_col1, input_col2 = st.columns([6, 1])
 with input_col1:
     question = st.text_input(
         "请输入您的问题：",
-        value=st.session_state.current_question,
+        value=pending_question_value,
         placeholder="例如：流浪地球的导演是谁？",
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="chat_input_box"
     )
 with input_col2:
-    search_clicked = st.button("🔍 查询", use_container_width=True, type="primary")
+    search_clicked = st.button("🔍 查询", use_container_width=True, type="primary", key="chat_search_btn")
 
-# 清除当前问题（避免重复）
-if st.session_state.current_question:
-    st.session_state.current_question = ""
+# 清除待处理问题（已捕获到 pending_question_value 中）
+st.session_state.current_question = ""
 
 # ===================== 推荐问题 =====================
 suggestions = get_suggestions(session_id, API_BASE_URL)
@@ -609,7 +615,8 @@ if suggestions:
 st.markdown("---")
 
 # ===================== 处理查询 =====================
-if search_clicked and question.strip():
+# 触发条件：用户点击查询按钮，或存在来自按钮的待处理问题
+if (search_clicked or has_pending_question) and question.strip():
     # 添加到消息历史
     st.session_state.messages.append({"role": "user", "content": question})
 
