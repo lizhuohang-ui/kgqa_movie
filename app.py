@@ -181,7 +181,7 @@ st.markdown("""
 
 # ===================== 工具函数 =====================
 @st.cache_data(ttl=5)
-def call_api(question, use_llm=False, session_id=DEFAULT_SESSION_ID, api_base=API_BASE_URL):
+def call_api(question, use_llm=True, session_id=DEFAULT_SESSION_ID, api_base=API_BASE_URL):
     """调用后端 API（带缓存）"""
     try:
         response = requests.get(
@@ -486,9 +486,15 @@ with st.sidebar:
     if api_url != API_BASE_URL:
         API_BASE_URL = api_url
 
+    health = get_health(API_BASE_URL)
+    llm_status = health.get("llm", {})
+    llm_configured = bool(llm_status.get("configured"))
+
     # 大模型开关
-    use_llm = st.checkbox("🤖 使用大模型生成答案", value=False,
+    use_llm = st.checkbox("🤖 使用大模型生成答案", value=llm_configured,
                           help="开启后会调用 DeepSeek 等大模型 API 生成更自然的回答，需要配置 API 密钥")
+    if use_llm and not llm_configured:
+        st.warning("后端未读取到 LLM_API_KEY，将自动回退到规则模板。")
 
     # 会话管理
     st.markdown("---")
@@ -509,9 +515,12 @@ with st.sidebar:
     # 系统状态
     st.markdown("---")
     st.markdown("### 📊 系统状态")
-    health = get_health(API_BASE_URL)
     if health.get("status") == "healthy":
         st.markdown('<span class="status-dot status-green"></span>**后端服务正常**', unsafe_allow_html=True)
+        if llm_configured:
+            st.markdown(f"**LLM**: `{llm_status.get('model', 'unknown')}` 已配置")
+        else:
+            st.markdown("**LLM**: 未配置，将使用规则模板")
         stats = health.get("graph_stats", {})
         if stats:
             nodes = stats.get("nodes", {})

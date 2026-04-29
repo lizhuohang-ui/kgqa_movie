@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
+from config import get_llm_status
 
 # 导入五大核心模块
 from core_modules import (
@@ -35,7 +36,7 @@ app.add_middleware(
 
 class QuestionRequest(BaseModel):
     question: str
-    use_llm: bool = False
+    use_llm: bool = True
     session_id: Optional[str] = "default"
 
 
@@ -99,13 +100,15 @@ def health_check():
         return {
             "status": "healthy",
             "neo4j_connected": True,
-            "graph_stats": stats
+            "graph_stats": stats,
+            "llm": get_llm_status()
         }
     except Exception as e:
         return {
             "status": "unhealthy",
             "neo4j_connected": False,
-            "error": str(e)
+            "error": str(e),
+            "llm": get_llm_status()
         }
 
 
@@ -190,7 +193,7 @@ def kgqa(request: QuestionRequest):
 
 
 @app.get("/kgqa")
-def kgqa_get(question: str, use_llm: bool = False, session_id: str = "default"):
+def kgqa_get(question: str, use_llm: bool = True, session_id: str = "default"):
     """KGQA GET接口（兼容简单调用）"""
     request = QuestionRequest(question=question, use_llm=use_llm, session_id=session_id)
     return kgqa(request)

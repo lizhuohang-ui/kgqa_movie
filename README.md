@@ -7,14 +7,20 @@
 ```
 kgqa_movie/
 ├── movies_data.csv           # 电影数据集（60条，含7个字段）
-├── data_preprocess.py        # 数据预处理（去重、去空、格式标准化）
-├── neo4j_import.py           # Neo4j图谱批量导入（Movie/Person/Genre节点及关系）
+├── data_tools/               # 数据采集、预处理、图谱导入脚本
+│   ├── data_preprocess.py    # 数据预处理（去重、去空、格式标准化）
+│   ├── neo4j_import.py       # Neo4j图谱批量导入（Movie/Person/Genre节点及关系）
+│   └── douban_crawler.py     # 豆瓣公开电影数据采集脚本
+├── tests/                    # 自动化测试与连通性检查脚本
+│   ├── test_config.py        # LLM配置读取测试
+│   ├── test_douban_crawler.py # 豆瓣采集解析测试
+│   └── test_llm_api.py       # 大模型API连通性测试脚本
 ├── intent_model_train.py     # BERT意图分类模型训练脚本
 ├── intent_model.pth          # 已训练的BERT意图模型权重
 ├── core_modules.py           # 六大核心模块封装（意图+实体+查询+答案+对话）
 ├── main_api.py               # FastAPI后端接口（8个RESTful端点）
 ├── app.py                    # Streamlit前端界面（含ECharts图谱可视化）
-├── test_llm_api.py           # 大模型API连通性测试脚本
+├── config.py                 # 环境变量和本地 .env 配置读取
 ├── requirements.txt          # Python依赖包（精确版本号）
 ├── DEPLOYMENT.md             # 跨平台部署指南（Arch Linux / Windows 10）
 └── README.md                 # 项目说明文档
@@ -46,18 +52,17 @@ kgqa_movie/
 
 **Python 版本要求：3.8 ~ 3.10**
 
+本项目已使用 `uv` 在仓库根目录创建虚拟环境 `.venv`。后续不要重复创建普通 `venv`，直接激活并安装/刷新依赖即可：
+
 ```bash
-# 创建虚拟环境
-python -m venv .venv
-
-# 激活虚拟环境（Linux/macOS）
+# 激活 uv 管理的虚拟环境（Linux/macOS）
 source .venv/bin/activate
-# 激活虚拟环境（Windows）
-.venv\Scripts\activate
 
-# 安装依赖
-pip install -r requirements.txt
+# 安装或刷新依赖
+uv pip install -r requirements.txt
 ```
+
+Windows PowerShell 可使用 `.venv\Scripts\Activate.ps1` 激活环境。也可以不激活环境，直接在命令前添加 `uv run`。
 
 ### 2. 安装并启动 Neo4j
 
@@ -87,10 +92,10 @@ docker run -d \
 
 ```bash
 # 预处理数据（去重、去空、格式标准化）
-python data_preprocess.py
+uv run python data_tools/data_preprocess.py
 
 # 构建知识图谱（创建节点和关系）
-python neo4j_import.py
+uv run python data_tools/neo4j_import.py
 ```
 
 > 使用 Docker 方式时项目目录已挂载到容器的 `/var/lib/neo4j/import/`，无需手动复制文件。
@@ -98,7 +103,7 @@ python neo4j_import.py
 ### 4. 训练意图识别模型（可选）
 
 ```bash
-python intent_model_train.py
+uv run python intent_model_train.py
 ```
 
 > 模型将保存为 `intent_model.pth`。若跳过此步骤，`core_modules.py` 将以规则匹配方式运行（关键词 + 长匹配权重），仍可正常工作但准确率略低于 BERT 模型。
@@ -106,7 +111,7 @@ python intent_model_train.py
 ### 5. 启动后端服务
 
 ```bash
-uvicorn main_api:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn main_api:app --reload --host 0.0.0.0 --port 8000
 ```
 
 访问 http://localhost:8000/docs 查看 Swagger API 文档。
@@ -114,15 +119,27 @@ uvicorn main_api:app --reload --host 0.0.0.0 --port 8000
 ### 6. 启动前端界面
 
 ```bash
-# 新开一个终端，激活虚拟环境
-streamlit run app.py --server.port 8501
+# 新开一个终端
+uv run streamlit run app.py --server.port 8501
 ```
 
 访问 http://localhost:8501 使用问答系统。
 
 > 详见 [`DEPLOYMENT.md`](./DEPLOYMENT.md) 获取 Arch Linux + Hyprland / Windows 10 的完整部署指南，含 Docker 配置、Hyprland 工作区布局、systemd 服务化等。
 
-## 💬 测试用例
+## ✅ 自动化测试
+
+```bash
+uv run python -m unittest discover -s tests -p 'test*.py'
+```
+
+大模型 API 连通性检查：
+
+```bash
+uv run python tests/test_llm_api.py
+```
+
+## 💬 问答测试用例
 
 | 问题 | 预期意图 | 预期答案 |
 |------|---------|---------|
@@ -194,21 +211,54 @@ streamlit run app.py --server.port 8501
 
 本项目默认使用 **DeepSeek** 大模型生成自然语言答案（未配置时自动回退到规则模板）。
 
-通过环境变量配置 API 密钥（推荐，避免硬编码）：
+通过环境变量或本地 `.env` 文件配置 API 密钥，避免把真实密钥写入代码：
 
 ```bash
 export LLM_API_KEY="your-deepseek-api-key"
 export LLM_URL="https://api.deepseek.com/chat/completions"
+export LLM_MODEL="deepseek-chat"
 ```
 
-也可直接在 `core_modules.py` 中修改：
+也可以创建本地 `.env` 文件（已被 `.gitignore` 忽略）：
 
-```python
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "your-api-key-here")
-LLM_URL = os.environ.get("LLM_URL", "https://api.deepseek.com/chat/completions")
+```bash
+cp .env.example .env
+# 然后只在本地 .env 中填写真实 LLM_API_KEY
 ```
 
-> 兼容其他 OpenAI 兼容 API（如 ChatGLM、通义千问等），只需替换 `LLM_URL` 和对应的 `model` 字段。
+配置完成后可运行连通性测试：
+
+```bash
+uv run python tests/test_llm_api.py
+```
+
+> 兼容其他 OpenAI 兼容 API（如 ChatGLM、通义千问等），只需替换 `LLM_URL` 和 `LLM_MODEL`。
+
+## 🕷️ 豆瓣数据采集
+
+可使用 `data_tools/douban_crawler.py` 采集豆瓣公开电影页面中的中国电影、导演、演员、类型、年份、评分等信息，用于后续扩充图数据库。
+
+```bash
+uv run python data_tools/douban_crawler.py \
+  --movie-limit 100 \
+  --actor-limit 100 \
+  --output-dir data/douban
+```
+
+默认输出：
+
+- `data/douban/movies.json`：电影完整信息
+- `data/douban/actors.json`：演员信息
+- `data/douban/movies_data_douban.csv`：兼容当前 `movies_data.csv` 字段的图谱导入数据
+- `data/douban/crawl_report.json`：采集统计
+
+如果默认公开列表页无法收集到足够多的中国电影，可准备一个种子文件，每行一个豆瓣电影详情页 URL：
+
+```bash
+uv run python data_tools/douban_crawler.py --seed-url-file douban_seed_urls.txt
+```
+
+脚本会限速、缓存 HTML，并遵守豆瓣 robots 规则；不会访问 `/search`、`/subject_search`、`/celebrities/search`、`/j/` 等搜索/API 路径，也不会处理登录、验证码或反爬绕过。
 
 ## 🌟 前端功能
 
@@ -241,7 +291,7 @@ RETURN DISTINCT d.name AS director, m.title AS movie
 | 大模型API调用失败 | 检查API Key、额度、请求格式、网络连接（未配置时将自动回退到规则模板） |
 | 前后端不通 | 确认跨域配置、端口是否开放、API地址是否一致 |
 | BERT模型下载慢 | 设置 `HF_ENDPOINT=https://hf-mirror.com` 使用镜像 |
-| pandas/numpy版本冲突 | 使用 `requirements.txt` 中的精确版本号安装 |
+| pandas/numpy版本冲突 | 使用 `uv pip install -r requirements.txt` 按精确版本号安装 |
 
 ## 📝 评分标准参考
 

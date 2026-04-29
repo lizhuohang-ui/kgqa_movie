@@ -13,6 +13,7 @@ import requests
 import json
 import re
 import os
+from config import get_llm_config, has_llm_api_key
 
 # ======================
 # 全局配置
@@ -28,10 +29,11 @@ NEO4J_URI = "neo4j://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PWD = "20040121"
 
-# 大模型API配置（请通过环境变量设置，避免硬编码密钥）
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-
-LLM_URL = os.environ.get("LLM_URL", "https://api.deepseek.com/chat/completions")
+# 大模型API配置（从环境变量或本地 .env 读取，避免硬编码密钥）
+LLM_CONFIG = get_llm_config()
+LLM_API_KEY = LLM_CONFIG.api_key
+LLM_URL = LLM_CONFIG.url
+LLM_MODEL = LLM_CONFIG.model
 
 # ======================
 # 3.1 意图识别模块
@@ -709,10 +711,22 @@ class AnswerGenerator:
     2. 大模型生成（自然、灵活）
     """
 
-    def __init__(self, api_key=None, api_url=None):
-        self.api_key = api_key or LLM_API_KEY
-        self.api_url = api_url or LLM_URL
-        self.use_llm = self.api_key and self.api_key != "your-api-key-here"
+    def __init__(self, api_key=None, api_url=None, model=None):
+        self._api_key_override = api_key
+        self._api_url_override = api_url
+        self._model_override = model
+        self._refresh_config()
+
+    def _refresh_config(self):
+        llm_config = get_llm_config(
+            api_key=self._api_key_override,
+            api_url=self._api_url_override,
+            model=self._model_override,
+        )
+        self.api_key = llm_config.api_key
+        self.api_url = llm_config.url
+        self.model = llm_config.model
+        self.use_llm = has_llm_api_key(self.api_key)
 
     def _rule_based(self, question, intent, entity, result):
         """
@@ -778,7 +792,7 @@ class AnswerGenerator:
         }
 
         data = {
-            "model": "deepseek-chat",
+            "model": self.model,
             "messages": [
                 {"role": "system", "content": "你是一个电影知识图谱问答助手，擅长将结构化数据转化为自然语言。"},
                 {"role": "user", "content": prompt}
@@ -810,6 +824,8 @@ class AnswerGenerator:
             answer: 自然语言答案
             source: 答案来源（rule/llm）
         """
+        self._refresh_config()
+        print("use_llm:", use_llm, "llm_configured:", self.use_llm)
         # 优先尝试大模型
         if use_llm and self.use_llm:
             llm_answer = self._llm_generate(question, result)
@@ -1047,7 +1063,7 @@ if __name__ == "__main__":
 
     # 完整Pipeline测试
     print("\n【6. 完整Pipeline测试】")
-    pipeline = KGQAPipeline(use_llm=False)
+    pipeline = KGQAPipeline(use_llm=True)
     test_qs = [
         "流浪地球的导演是谁？",
         "周星驰主演过哪些电影？",
